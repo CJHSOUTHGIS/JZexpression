@@ -61,7 +61,6 @@ window.styleDeal = new FormStyleDetailUtil();
 //业务类型的公用方法
 //#import CommonPorjectObject
 window.commonPorjectObject = new CommonPorjectObject();
-
 /**
  * 创建后事件
  */
@@ -123,16 +122,6 @@ window.getSInfoWebDownLoadUrl = function (fileName, macroPath, sInfoUrl) {
     //改为使用co定义的方法，减少工作量，不直接改使用此方法的地方，后续的所有使用都可以直接使用co的方法
     return co.File.getSInfoWebDownLoadUrl({"fileName": fileName, "macroPath": macroPath, "sInfoUrl": sInfoUrl});
 }
-/**
- * 获取sInfoWeb下载地址
- * @param fileName
- * @param macroPath
- */
-window.getiBaseDownLoadUrl = function (fileName, macroPath) {
-    //改为使用co定义的方法，减少工作量，不直接改使用此方法的地方，后续的所有使用都可以直接使用co的方法
-    return co.File.getiBaseDownLoadUrl({"fileName": encodeURIComponent(fileName), "macroPath": macroPath});
-}
-
 
 /**
  * 成果模板下载
@@ -156,72 +145,33 @@ function downLoadCgmb() {
     }
 }
 
-window.sinfo_uploadSingleFileWithProgress = function (controlId, colKey, fileType, showUploadBtn, showDeleteBtn, showDownLoadBtn, doAfterSetValue, multiple) {
-    if(!multiple){
-        multiple = false;
-    }
+window.sinfo_uploadSingleFileWithProgress = function (controlId, colKey, fileType, showUploadBtn, showDeleteBtn, showDownLoadBtn, doAfterSetValue, showDownFileWithPwd, showTipPassword) {
     window.styleDeal.sinfo_uploadSingleFileWithProgress({
         selector: document.getElementById(controlId),
         controlId: controlId,
         acceptFileType: fileType,
-        multiple: multiple,
+        multiple: false,
         showUploadBtn: showUploadBtn === undefined ? true : showUploadBtn,  // 不传默认true
         showDownLoadBtn: showDownLoadBtn === undefined ? true : showDownLoadBtn,  // 不传默认true
         showDeleteBtn: showDeleteBtn === undefined ? true : showDeleteBtn,  // 不传默认true
+        showDownFileWithPwd: showDownFileWithPwd === undefined ? false : showDownFileWithPwd,  // 不传默认false
+        showTipPassword: showTipPassword,
         uploadParams: {
             srcType: 0,
             isPreview: true,
             fileInfo: JSON.stringify({taskId: co.params.jid}),
-            // 格式：/rid/表单_字段名（与系统一致，不包含jid）
-            prefixFolder: '/' + co.params.rid + '/' + co.params.table + '_' + colKey
+            prefixFolder: '/' + co.params.jid + '/' + co.params.rid + '/' + co.params.table + '_' + colKey
         },
         getCurrentFileData: () => co.getValue(colKey),
         setCurrentFileData: function (currentFileNewData) {
-            co.setValueSync(colKey, currentFileNewData, "", "",true);
-            if (doAfterSetValue) {
-                doAfterSetValue();
-            }
+            co.setValue(colKey, currentFileNewData, "", "",true).then(() => {
+                if (doAfterSetValue) {
+                    doAfterSetValue();
+                }
+            })
         },
-        getSInfoWebDownLoadUrl: window.getSInfoWebDownLoadUrl,
-        // 新增重试配置
-        retryConfig: {
-            maxRetries: 3,           // 最大重试次数
-            retryDelay: 2000,        // 重试延迟(毫秒)
-            retryDelayMultiplier: 2  // 延迟倍数递增
-        },
-        // 启用分片上传（该项目使用分片上传）
-        enableChunkUpload: false,
-        // 启用并行分片上传（提高上传速度）
-        enableParallelUpload: true,
-        // 最大并发分片数量（避免资源占用过多，建议2-5个）
-        maxConcurrentChunks: 5
+        getSInfoWebDownLoadUrl: window.getSInfoWebDownLoadUrl
     })
-}
-/**
- * 计算当前时间是否是某个日期的一周前之后
- * @param targetStr
- * @returns {boolean}
- */
-window.isCurrentAfterOneWeekBefore = function (targetStr) {
-    // 解析目标时间字符串为Date对象（按本地时间处理）
-    const targetDate = new Date(targetStr.replace(' ', 'T'));
-    if (isNaN(targetDate.getTime())) {
-        throw new Error('无效的时间字符串');
-    }
-
-    // 计算目标日期的前一周时间
-    const oneWeekBefore = new Date(targetDate);
-    oneWeekBefore.setDate(oneWeekBefore.getDate() - 7);
-
-    // 获取当前时间
-    const now = new Date();
-
-    // 判断当前时间是否在前一周之后
-    return now > oneWeekBefore;
-}
-
-window.sinfo_uploadMultipleFileWithProgress = function (controlId, colKey, fileType, showUploadBtn, showDeleteBtn, showDownLoadBtn, doAfterSetValue) {
-    window.sinfo_uploadSingleFileWithProgress(controlId, colKey, fileType, showUploadBtn, showDeleteBtn, showDownLoadBtn, doAfterSetValue, true);
 }
 /**
  * 文件上传控件样式修改
@@ -248,13 +198,23 @@ window.changeFileUploadControl = function () {
         }
         //文件控件样式修改
         if (cgscAndBgscEdit) {//可编辑
-            //成果上传
-            window.sinfo_uploadSingleFileWithProgress("FF0EB1838C79B44B9F65", "WJJSC", ".zip", true, true, true, window.doAfterUploadedWjjsc);
-            //成果报告上传
-            window.sinfo_uploadSingleFileWithProgress("F4C0B1838C85FDD641E8", "CGBGSC", ".pdf");
+            // 成果上传
+            let zipPassword = co.getDomainValue("ZIPPASSWORD", true);
+            // 如果成果包已经加上了解压密码，则用有提示解压密码的下载按钮
+            if (zipPassword != '' && zipPassword != null) {
+                window.sinfo_uploadSingleFileWithProgress("FF0EB1838C79B44B9F65", "WJJSC", ".zip", true, true, false, window.doAfterUploadedWjjsc, true, zipPassword);
+            } else {
+                window.sinfo_uploadSingleFileWithProgress("FF0EB1838C79B44B9F65", "WJJSC", ".zip", true, true, true, window.doAfterUploadedWjjsc);
+            }
         } else {//不可编辑
-            //成果上传
-            window.sinfo_uploadSingleFileWithProgress("FF0EB1838C79B44B9F65", "WJJSC", ".zip", false, false, true, window.doAfterUploadedWjjsc);
+            // 成果上传
+            // 如果成果包已经加上了解压密码，则用有提示解压密码的下载按钮
+            let zipPassword = co.getDomainValue("ZIPPASSWORD", true);
+            if (zipPassword != '' && zipPassword != null) {
+                window.sinfo_uploadSingleFileWithProgress("FF0EB1838C79B44B9F65", "WJJSC", ".zip", false, false, false, window.doAfterUploadedWjjsc, true, zipPassword);
+            } else {
+                window.sinfo_uploadSingleFileWithProgress("FF0EB1838C79B44B9F65", "WJJSC", ".zip", false, false, true, window.doAfterUploadedWjjsc);
+            }
             //成果报告上传
             window.sinfo_uploadSingleFileWithProgress("F4C0B1838C85FDD641E8", "CGBGSC", ".pdf", false, false);
         }
@@ -292,12 +252,25 @@ window.changeFileUploadControl = function () {
             //业务审核质检报告
             window.sinfo_uploadSingleFileWithProgress("F79591838C88E94E8E95", "YWSHZJBG", "");
             //盖章成果
-            window.sinfo_uploadSingleFileWithProgress("F55FA1838C898A085A82", "QZHCGWJ", "");
+            // 如果盖章成果包已经加上了解压密码，则用有提示解压密码的下载按钮
+            let qzZipPassword = co.getDomainValue("QZCGBZIPPASSWORD", true);
+            if (qzZipPassword != '' && qzZipPassword != null) {
+                window.sinfo_uploadSingleFileWithProgress("F55FA1838C898A085A82", "QZHCGWJ", ".zip", true, true, false, window.doAfterUploadedQZHCGWJ(), true, qzZipPassword);
+            } else {
+                window.sinfo_uploadSingleFileWithProgress("F55FA1838C898A085A82", "QZHCGWJ", "");
+            }
+
         } else {//不可编辑
             //业务审核质检报告
             window.sinfo_uploadSingleFileWithProgress("F79591838C88E94E8E95", "YWSHZJBG", "", false, false);
             //盖章成果
-            window.sinfo_uploadSingleFileWithProgress("F55FA1838C898A085A82", "QZHCGWJ", "", false, false);
+            // 如果盖章成果包已经加上了解压密码，则用有提示解压密码的下载按钮
+            let qzZipPassword = co.getDomainValue("QZCGBZIPPASSWORD", true);
+            if (qzZipPassword != '' && qzZipPassword != null) {
+                window.sinfo_uploadSingleFileWithProgress("F55FA1838C898A085A82", "QZHCGWJ", ".zip", false, false, false, window.doAfterUploadedQZHCGWJ(), true, qzZipPassword);
+            } else {
+                window.sinfo_uploadSingleFileWithProgress("F55FA1838C898A085A82", "QZHCGWJ", "", false, false);
+            }
         }
         //空间入库环节==================================================================================================
         // let ywshzjkjrkDwgExcelCanEdit = false;//空间入库dwg和excel文件的是否可编辑，默认否
@@ -396,6 +369,8 @@ window.initialStyleModification = function () {
             } // 文案特殊样式
         }
     });
+
+    window.sinfo_uploadSingleFileWithProgress("F393E19E62CB20F49C43", "CHCGQRD", ".pdf", false, false, true);
 
     //所有文件上传控件样式修改
     window.changeFileUploadControl();
@@ -507,13 +482,10 @@ window.doAfterUploadedWjjsc = function () {
         //设置为质检未通过
         co.setValueMulti({
             "SFZJTG": "0",
-            "WJJSC": co.getDomainValue("WJJSC"),
-            "SMJCSFTG":""
+            "WJJSC": co.getDomainValue("WJJSC")
         }, "", "", true);
         //修改质检状态
         window.shztShow();
-        window.smztShow();
-        co.Sql.execSql("根据成果汇交rid删除涉密检测失败数据", {"rid":co.getValue("RID")});
         if (co.getDomainValue('WJJSC') != "" && co.getDomainValue('WJJSC') != null && co.getDomainValue('WJJSC') != undefined) {
             let isSave = co.getDomainValue("RID", true) ? true : false;//是否保存过
             if (isSave) {//保存过则直接执行
@@ -571,6 +543,8 @@ window.doAfterUploadedWjjsc = function () {
                         co.setDomainValue("QZHCGWJ", "", true);
                         //盖章成果
                         window.sinfo_uploadSingleFileWithProgress("F55FA1838C898A085A82", "QZHCGWJ", "", false, false);
+                        //删除可能存在的签章后成果包解压密码
+                        co.setDomainValue("QZCGBZIPPASSWORD", "", true);
                     },
                     error: (ret) => {
                     }
@@ -593,11 +567,18 @@ window.doAfterUploadedWjjsc = function () {
             }, "","",true);
             //签章的状态修改为未签章   end====================
 
+            //删除可能存在的解压密码
+            co.setDomainValue("ZIPPASSWORD", "", true);
+
             co.Toolbox.hideMask();
         }
     } catch (e) {
         console.log(e);
     }
+}
+window.doAfterUploadedQZHCGWJ = function () {
+    //删除可能存在的解压密码
+    co.setDomainValue("QZCGBZIPPASSWORD", "", true);
 }
 
 /**
@@ -743,6 +724,146 @@ window.ChangeCGSC = function () {
 //         co.Subform.refresh("F73DC1766F699B7D9800");
 //     })
 // }
+
+
+// 质量检查结果弹窗
+window.qualityInspectionResultsModel = function(
+    vue,
+    message,
+    successCallback,
+    errorCallback,
+    downloadCallback,
+    errorMessage,
+    hideDownloadBtn = false,
+    successMessage = "质检成功,未检测出错误",
+    downloadBtnText = "下载质检结果详情"
+) {
+    const tableData = message
+    var error = true
+    if (tableData.rowsList.length == 0){
+        error = false
+    }else{
+        // let errorMessage = JSON.parse(result.ErrorMessage);
+        // Object.keys(errorMessage).forEach((key) => {
+        //   tableData.push({
+        //     error: key,
+        //     num: errorMessage[key]["个数"]
+        //   });
+        // });
+    }
+    let newColumns = [];
+    console.log(tableData, 'tableData')
+    if(tableData.hideTitle){
+        [...tableData.columns].filter(x => [...tableData.hideTitle].every(y => y.key !== x.key)).forEach(element => {
+            const obj = {
+                title: element.label,
+                key: element.key,
+                width: element.label === '序号' ? '60px' : element.label === '错误描述' ? 'auto' : '140px'
+            }
+            if(element.key === 'errdesc') {
+                obj.slot = element.key
+                newColumns.push(obj)
+            } else {
+                newColumns.push(obj)
+            }
+        })
+    }else{
+        tableData.columns.forEach(element => {
+            const obj = {
+                title: element.label,
+                key: element.key,
+                width: element.label === '序号' ? '60px' : element.label === '错误描述' ? 'auto' : '140px'
+            }
+            if(element.key === 'errdesc') {
+                obj.slot = element.key
+                newColumns.push(obj)
+            } else {
+                newColumns.push(obj)
+            }
+        })
+    }
+    vue.$modal.alert({
+        title: "自动检查结果",
+        closable: true,
+        render: (h) => {
+            h = vue.$createElement
+            return h({
+                template: `
+                    <div>
+                      <div v-if="error">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 20px;">
+                          <span style="color: red; line-height: 36px;">{{msg}}</span>
+                          <sg-button type="primary" @click="download" v-if="!hideDownloadBtn && zipurl">{{ downloadBtnText }}</sg-button>
+                        </div>
+                        <sg-table border :columns="columns" :data="data" :header-custom-height="40" :height="500" >
+                          <template slot-scope="{ row }" slot="errdesc">
+                            <div v-for="(errTxt, inx) in Array.from(new Set(row['errdesc'].split('；')))" :key="inx" style="padding: 3px 5px">
+                            {{errTxt}}
+                            </div>
+                          </template>
+                        </sg-table>
+                      </div>
+                      <div style="text-align: center" v-else>
+                        <sg-icon type="icon-success-fill" color="#03a34e" size="90" style="font-size: 90px !important"/>
+                        <div style="text-align: center; white-space: pre-line;">{{ successMessage }}</div>
+                      </div>
+                    </div>
+                    `,
+                // template: `<sg-table border :columns="columns" :data="data" :header-custom-height="40"></sg-table>`,
+                data() {
+                    return {
+                        error: error,
+                        data: tableData.rowsList,
+                        columns: newColumns,
+                        zipurl: tableData.zipurl,
+                        hideDownloadBtn: hideDownloadBtn,
+                        // length: tableData.rowsList.length
+                        msg: errorMessage
+                            ? errorMessage.replace(/{NUM}/g, tableData.rowsList.length)
+                            : `质检完成，存在${tableData.rowsList.length}处错误，如下：`,
+                        successMessage,
+                        downloadBtnText
+                    };
+                },
+                mounted() {
+                    console.log("test data");
+                    console.log(this.data);
+                    console.log(this.columns);
+                },
+                methods: {
+                    download() {
+                        if (downloadCallback) {
+                            downloadCallback(this.zipurl);
+                        } else {
+                            console.log(tableData);
+                            window.open(this.zipurl);
+                        }
+                    }
+                }
+            });
+        },
+        // okText: "关闭",
+        footerHide: true,
+        similar: true,
+        onOk: () => {
+            vue.$modal.remove();
+        },
+        onHidden: () => {
+            if(error){
+                if(errorCallback){
+                    errorCallback()
+                }
+            }else{
+                if(successCallback){
+                    successCallback()
+                }
+            }
+        },
+        width: "",
+        height: ""
+    });
+}
+
 
 /**
  * 在线质检1.0 idata质检
@@ -915,7 +1036,8 @@ window.startAutoCheck = function (bIsSubmit) {
                         })
                     }, 500);
                 } else {
-                    window.parent.$sinfoUtil.qualityInspectionResultsModel(
+                    window.qualityInspectionResultsModel(
+                    // window.parent.$sinfoUtil.qualityInspectionResultsModel(
                         window.Sgui,
                         JSON.parse(data.data),
                         () => {
@@ -927,7 +1049,9 @@ window.startAutoCheck = function (bIsSubmit) {
                         (data) => {
                             window.downloadZjcwb();
                         },
-                        '质检完成，存在{NUM}类错误，如下：'
+                        '质检完成，存在{NUM}类错误，如下：',
+                        false,
+                        "质检成功,未检测出错误\n系统只对成果包的结构完整性进行检查，不对成果内容进行检查"
                     );
                 }
                 console.log("123456");
@@ -937,7 +1061,8 @@ window.startAutoCheck = function (bIsSubmit) {
                 // 修改页面红字审查
                 shztShow();
                 co.setValue("ZJJGJSON", data.data);
-                window.parent.$sinfoUtil.qualityInspectionResultsModel(
+                window.qualityInspectionResultsModel(
+                    // window.parent.$sinfoUtil.qualityInspectionResultsModel(
                     window.Sgui,
                     JSON.parse(data.data),
                     () => {
@@ -984,8 +1109,6 @@ window.startAutoCheck = function (bIsSubmit) {
         console.log("成功===" + error);
         co.Ctrl.setHide("1614671981000_17081");
         co.Ctrl.setHide("F5B7217AE5FFF97B3521");
-        co.Ctrl.setHide("F074119582AE7743B3A3");
-        co.Ctrl.setHide("F8B2319582ADBC9CB411");
         co.Message.error_middle("质检错误，" + error)
     }
 }
@@ -1027,11 +1150,6 @@ window.startAutoCheckSme = function (bIsSubmit) {
             getCglxValue = dataCHSXArr.sql1[0]["IDATA_ZJLX"];
         }
     }
-    //根据区县配置质检方案
-    let dataSFQYSXZJFA=co.Sql.execSql("根据行政区和测量事项获取质检方案", {"xzq": co.getValue("XZQCODE"),"clsx":co.getValue("SSCG")});
-    if(dataSFQYSXZJFA&&dataSFQYSXZJFA.sql1&&dataSFQYSXZJFA.sql1.length>0){
-        getCglxValue =dataSFQYSXZJFA.sql1[0]['SMECGZJFA'];
-    }
     if (!getCglxValue) {
         // 质检启动失败！请联系超级管理员配置质检类型
         co.Message.error_middle('质检启动失败！请联系超级管理员配置质检类型')
@@ -1053,11 +1171,11 @@ window.startAutoCheckSme = function (bIsSubmit) {
     let oParam = {
         "data": [
             {
-                "path": getFileUrl + '/file/public/downFileByPath?fileName=' + encodeURIComponent(fileName) +
-                    '&macroPath=' + encodeURIComponent(downStr) + '&userId=00000001-0000-0000-0010-000000000001',
+                "path": getFileUrl + '/file/public/downFileByPath?fileName=' + encodeURIComponent(fileName) + '&macroPath=' + encodeURIComponent(downStr),
                 // "type": "地下管线竣工测量",
                 "type": getCglxValue,
-                "zipType": iZipType
+                "zipType": iZipType,
+                "zipPassword": co.getDomainValue("ZIPPASSWORD", true)
             }
         ]
     };
@@ -1155,7 +1273,8 @@ window.startAutoCheckSme = function (bIsSubmit) {
                     shztShow();
                     if (bIsSubmit) {
                         if (data.total > 0) {
-                            window.parent.$sinfoUtil.qualityInspectionResultsModel(
+                            window.qualityInspectionResultsModel(
+                                // window.parent.$sinfoUtil.qualityInspectionResultsModel(
                                 window.Sgui,
                                 data,
                                 () => {
@@ -1182,7 +1301,8 @@ window.startAutoCheckSme = function (bIsSubmit) {
                             }, 500);
                         }
                     } else {
-                        window.parent.$sinfoUtil.qualityInspectionResultsModel(
+                        window.qualityInspectionResultsModel(
+                            // window.parent.$sinfoUtil.qualityInspectionResultsModel(
                             window.Sgui,
                             data,
                             () => {
@@ -1204,7 +1324,8 @@ window.startAutoCheckSme = function (bIsSubmit) {
                     // 修改页面红字审查
                     shztShow();
                     co.setValue("ZJJGJSON", JSON.stringify(data));
-                    window.parent.$sinfoUtil.qualityInspectionResultsModel(
+                    window.qualityInspectionResultsModel(
+                        // window.parent.$sinfoUtil.qualityInspectionResultsModel(
                         window.Sgui,
                         data,
                         () => {
@@ -1269,20 +1390,15 @@ window.shztShow = function () {
         co.Ctrl.setHide("");
         co.Ctrl.setHide("1614671981000_17081", true);//质检结果包下载按钮
         co.Ctrl.setHide("F5B7217AE5FFF97B3521", true);//质检结果展示按钮
-        co.Ctrl.setHide("F074119582AE7743B3A3", true);//质检结果定位
-        co.Ctrl.setHide("F8B2319582ADBC9CB411", true);
-        ele.innerHTML = '<div style="font-size:25px;color:#00DB00"> <strong>质检通过 </strong></div>'
+
+        ele.innerHTML = '<div style="font-size:25px;color:#00DB00"> <strong>质检通过 </strong></div><div style="font-size:12px;color:#F00;margin-top:5px;">（系统只对成果包的结构完整性进行检查，不对成果内容进行检查）</div>'
     } else if (type === "1") {
         co.Ctrl.setHide("1614671981000_17081");
         co.Ctrl.setHide("F5B7217AE5FFF97B3521");
-        co.Ctrl.setHide("F074119582AE7743B3A3");
-        co.Ctrl.setHide("F8B2319582ADBC9CB411");
         ele.innerHTML = '<div style="font-size:25px;color:#F00"> <strong>质检不通过 </strong></div>'
     } else {
         co.Ctrl.setHide("1614671981000_17081", true);
         co.Ctrl.setHide("F5B7217AE5FFF97B3521", true);
-        co.Ctrl.setHide("F074119582AE7743B3A3", true);
-        co.Ctrl.setHide("F8B2319582ADBC9CB411", true);
         ele.innerHTML = '<div style="font-size:25px;color:#000000"> <strong>未质检 </strong></div>'
     }
 }
@@ -1474,16 +1590,7 @@ window.watermarkFile = function (IsSubmit) {
         "taskId": taskId,
         "notToPdfRegex" : notToPdfRegex,
         "clsx": co.getValue('SSCG'),
-
-        "needPic": true,//是否需要将图片转pdf后盖章
-
-        // "onlyCgbg":"1",//给啥字符串都行，有字符串代表只要报告文件，只会针对含有"报告"字样的文件进行盖章
-        /**
-         * 当onlyCgbg未空是，onlyFileMark生效
-         * 可以针对文件名含有特殊字符串字样的文件进行盖章，如果同时需要"报告"和其他文件，则onlyCgbg不传或留空，"onlyFileMark":["报告","xxxxx"],
-         */
-        // "onlyFileMark":["报告","宗地图","房产"],
-
+        "zipPassword": co.getDomainValue("ZIPPASSWORD", true)
         // "watermark": JSON.stringify(watermark),// pdf水印等配置,
         // "gz": JSON.stringify(gzobject),// pdf盖章等配置
         // "dwggz": JSON.stringify(dwggzobject)// dwg盖章等配置
@@ -1498,7 +1605,6 @@ window.watermarkFile = function (IsSubmit) {
             data: JSON.stringify(selectparam),
             dataType: "text",
             success: function (data) {
-                co.Toolbox.hideMask();
                 //  调用查询接口
                 let taskId = data;
                 queryQuality(
@@ -1572,26 +1678,18 @@ window.watermarkFile = function (IsSubmit) {
                         let oPaseParam = {
                             "zipDownUrl": zipDownUrl,
                             "dir": "/data/watermark/", // 文件暂存路径，与Nginx配置alias 保持一致
-                            "fileName": WJM.indexOf("(已盖章)") >= 0 ? (WJM + ".zip") : (WJM + "(已盖章).zip"),// 压缩包名称
+                            "fileName": WJM + "(已盖章).zip",// 压缩包名称
                             "rid": co.getValue('RID'),
                             "jid": co.getValue('JID'),
                             "taskId": taskId,
-                            "clsx": co.getValue('SSCG'),
-
-                            // "onlyCgbg":"1",//给啥字符串都行，有字符串代表只要报告文件，只会针对含有"报告"字样的文件进行盖章
-                            /**
-                             * 当onlyCgbg未空是，onlyFileMark生效
-                             * 可以针对文件名含有特殊字符串字样的文件进行盖章，如果同时需要"报告"和其他文件，则onlyCgbg不传或留空，"onlyFileMark":["报告","xxxxx"],
-                             * macroPath2必须配置，不配置则不会生效，配置需要签章成果包的宏路径即可
-                             */
-                            // "onlyFileMark":["报告","宗地图","房产"],
-                            // "macroPath2":filePath,
+                            "clsx": co.getValue('SSCG')
                         };
                         $.ajax({
                             //url: "http://192.168.92.1:9090/sinfoweb-hdy/cghj/public/parseWatermarkFile",
                             url: "/sinfoweb/cghj/public/parseWatermarkFile",
                             contentType: 'application/json; charset=utf-8',
                             type: "POST",
+                            async: false,
                             data: JSON.stringify(oPaseParam),
                             dataType: "json",
                             success: function (aData) {
@@ -1603,8 +1701,45 @@ window.watermarkFile = function (IsSubmit) {
                                 if (aData[2]) {
                                     co.setValue('CGBGSC', aData[2]);//更新报告文件
                                 }
+
                                 //盖章成果
-                                window.sinfo_uploadSingleFileWithProgress("F55FA1838C898A085A82", "QZHCGWJ", "");
+                                //==============签章完成之后对已签章成果压缩包进行加密start
+                                //如果测绘单位上传成果包时添加了解压密码，则签章后也需要对签章的成果包进行加密
+                                let zipPassword = co.getDomainValue("ZIPPASSWORD", true);
+                                if (zipPassword != '' && zipPassword != null) {
+                                    let fileSavePath = co.getValue("SVALUE", "syskey", "skey", "%%jobfiles%", true);
+                                    let zipFileStr = co.getValue("QZHCGWJ");
+                                    let zipFileStrSplit = zipFileStr.split("|");
+                                    let zipFilePath = zipFileStrSplit[1];
+                                    let macroPath = zipFilePath.replace("%%jobfiles%", fileSavePath);
+                                    co.Http.request({
+                                        url: "/sinfoweb/XinZhou/setPasswordForZip",
+                                        async: false,
+                                        responseType: "text",
+                                        data: {
+                                            "rid": co.getValue("RID"),
+                                            "macroPath": macroPath
+                                        },
+                                        success: (ret) => {
+                                            //ret = JSON.parse(ret);
+                                            let password = ret.password;
+                                            if (password) {
+                                                co.setDomainValue("QZCGBZIPPASSWORD", password, true);
+                                                console.log("签章后成果包加密成功，解压密码为：" + password);
+                                                //重新渲染成果上传控件，下载前弹出解压密码提示，隐藏原有成果下载按钮，显示有下载提示的按钮
+                                                window.sinfo_uploadSingleFileWithProgress("F55FA1838C898A085A82", "QZHCGWJ", "", true, true, false, window.doAfterUploadedQZHCGWJ, true, password);
+                                            }
+                                        },
+                                        error: (ret) => {
+                                            console.log("签章后成果包加密失败：" + ret);
+                                        }
+                                    })
+                                } else {
+                                    //没有开启签章后添加解压密码，则直接渲染签章成果包文件控件
+                                    window.sinfo_uploadSingleFileWithProgress("F55FA1838C898A085A82", "QZHCGWJ", "");
+                                }
+                                //==============签章完成之后对已签章成果压缩包进行加密end
+
                                 window.Vue.prototype.$modal.remove();// 移除遮罩
                                 window.Vue.prototype.$msg.info('签章完毕');
                                 if (IsSubmit) {
@@ -1631,6 +1766,7 @@ window.watermarkFile = function (IsSubmit) {
         }
 
         function errorCallback(error) {
+            co.Toolbox.showMask();
             co.Message.error_middle("签章出错")
         }
     }, 200);
@@ -2018,6 +2154,40 @@ window.unzipAndUploadCGB = function () {
             window.getImortDbFiles();
         }
         //==============解压完成之后进行入库文件的提取end
+
+        //==============解压完成之后对成果压缩包进行加密start
+        //如果开启了 上传成果包后添加解压密码，则执行
+        let isAddPwd = co.getValue("SCCGBHSFJM", "PROJ_YWXT_CONFIG", "1", "1", true);
+        if (isAddPwd == "1") {
+            let fileSavePath = co.getValue("SVALUE", "syskey", "skey", "%%jobfiles%", true);
+            let zipFileStr = co.getDomainValue("WJJSC");
+            let zipFileStrSplit = zipFileStr.split("|");
+            let zipFilePath = zipFileStrSplit[1];
+            let macroPath = zipFilePath.replace("%%jobfiles%", fileSavePath);
+            co.Http.request({
+                url: "/sinfoweb/XinZhou/setPasswordForZip",
+                async: false,
+                responseType: "text",
+                data: {
+                    "rid": co.getValue("RID"),
+                    "macroPath": macroPath
+                },
+                success: (ret) => {
+                    //ret = JSON.parse(ret);
+                    let password = ret.password;
+                    if (password) {
+                        co.setDomainValue("ZIPPASSWORD", password, true);
+                        console.log("成果包加密成功，解压密码为：" + password);
+                        //重新渲染成果上传控件，下载前弹出解压密码提示，隐藏原有成果下载按钮，显示有下载提示的按钮
+                        window.sinfo_uploadSingleFileWithProgress("FF0EB1838C79B44B9F65", "WJJSC", ".zip", true, true, false, window.doAfterUploadedWjjsc, true, password);
+                    }
+                },
+                error: (ret) => {
+                    console.log("成果包加密失败：" + ret);
+                }
+            })
+        }
+        //==============解压完成之后对成果压缩包进行加密end
     }
 
     function unzipFailCallBack(data) {
@@ -2035,13 +2205,19 @@ window.unzipAndUploadCGB = function () {
             })
         }
         co.setValueSync("WJJSC", "", "", "", true);
-        window.sinfo_uploadSingleFileWithProgress("FF0EB1838C79B44B9F65", "WJJSC", ".zip", true, true, true, window.doAfterUploadedWjjsc);
+
+        // 如果成果包已经加上了解压密码，则用有提示解压密码的下载按钮
+        let zipPassword = co.getDomainValue("ZIPPASSWORD", true);
+        if (zipPassword != '' && zipPassword != null) {
+            window.sinfo_uploadSingleFileWithProgress("FF0EB1838C79B44B9F65", "WJJSC", ".zip", true, true, false, window.doAfterUploadedWjjsc, true, zipPassword);
+        } else {
+            window.sinfo_uploadSingleFileWithProgress("FF0EB1838C79B44B9F65", "WJJSC", ".zip", true, true, true, window.doAfterUploadedWjjsc);
+        }
+
         co.Message.error_middle(data.desc);
     }
     try{
         co.Progress.baseProgressFake("正在解压成果包", 10000, "解压中……", null, null);
-        //持续进度条，无进度比率，接口请求完则关闭
-        //co.Progress.baseProgressLoop("正在解压成果包", "解压中……", null, null);
         setTimeout(() => {
             //查询报告提取配置
             let clsx = co.getValue("SSCG");
@@ -2159,7 +2335,6 @@ window.unzipFile = function (oPostData, successCallBack, failCallBack) {
     co.Http.request({
         url: "/sinfoweb/file/unzipFile",
         data: oPostData,
-        timeout: 1800000,
         success: (ret) => {
             co.Progress.baseProgressClose();
             let d = JSON.parse(ret);
@@ -2279,7 +2454,6 @@ window.recordCghjLogData = function (rid, addTjjl, updateTjjl, recordData) {
     }
     co.Http.request({
         url: "/sinfoweb/cghj/recordCghjSubmitData",
-        timeout: 1800000,
         data: data,
         success: (ret) => {
         },
@@ -3017,7 +3191,7 @@ window.signZipFile = function (type, submitAfterSuccess) {
                     let oPaseParam = {
                         "zipDownUrl": zipDownUrl,
                         "dir": "/data/watermark/", // 文件暂存路径，与Nginx配置alias 保持一致
-                        "fileName": zipFileName.indexOf("(已盖章)") >= 0 ? zipFileName : (zipFileName.substr(0, zipFileName.indexOf(".")) + "(已盖章).zip"),// 压缩包名称
+                        "fileName": zipFileName.indexOf("(已盖章)") ? zipFileName : (zipFileName.substr(0, zipFileName.indexOf(".")) + "(已盖章).zip"),// 压缩包名称
                         "rid": co.getValue('RID'),
                         "jid": co.getValue('JID'),
                         "taskId": co.params.taskId,
@@ -3095,7 +3269,7 @@ window.signZipFile = function (type, submitAfterSuccess) {
             zipFileStr = co.getDomainValue("WJJSC");
             break;
         case "审核部门"://根据配置决定签什么章
-            //签过章的要拿签章后的文件
+                    //签过章的要拿签章后的文件
             zipFileStr = co.getDomainValue("QZHCGWJ") ? co.getDomainValue("QZHCGWJ") : co.getDomainValue("WJJSC");
             break;
     }
@@ -3111,6 +3285,7 @@ window.signZipFile = function (type, submitAfterSuccess) {
             clsx: co.getDomainValue("SSCG"),
             xzq: co.getDomainValue("XZQCODE"),
             // bgFileSr: co.getDomainValue("CGBGSC")
+            zipPassword: co.getDomainValue("ZIPPASSWORD", true),
             rid: co.params.rid
         },
         success: (ret) => {
@@ -3132,370 +3307,6 @@ window.signZipFile = function (type, submitAfterSuccess) {
     })
 }
 
-
-/**
- * 修改涉密检测状态
- */
-window.smztShow = function (message) {
-    let ele = document.getElementById('F16CF1970A6809B2EC7E')
-    let type = co.getValue("SMJCSFTG");
-    if (type === "1") {
-        co.Ctrl.setHide("F64251970FB18ED7D04A", true);
-        ele.innerHTML = '<div style="font-size:25px;color:#00DB00"> <strong>涉密检测通过 </strong></div>'
-    } else if (type === "0") {
-        co.Ctrl.setHide("F64251970FB18ED7D04A", false);
-        ele.innerHTML = '<div style="font-size:25px;color:#F00"> <strong>涉密检测不通过 </strong></div>'
-    } else {
-        co.Ctrl.setHide("F64251970FB18ED7D04A", true);
-        ele.innerHTML = '<div style="font-size:25px;color:#000000"> <strong>未检测 </strong></div>'
-    }
-}
-
-window.smztShow();
-
-/**
- * 涉密检测
- **/
-window.startSmCheck = function(){
-    var marcoPath = co.getValue("WJJSC").split("|")[1]
-    $.ajax({
-        url: "/infosvrinsidedocking/orc/public/ocrByMarcoPath?marcoPath="+encodeURI(marcoPath),
-        type: "GET",
-        async: false,
-        success: function (result) {
-            console.log(result.TaskId)
-            let taskId = result.TaskId;
-            co.Toolbox.showMask();
-            setTimeout(() => {
-                co.Toolbox.hideMask();
-                setTimeout(() => {
-                    queryQuality(taskId);
-                }, 0)
-            }, 1000)
-        },
-        error: function (dataErr) {
-
-        }
-    });
-
-    function queryQuality(taskId) {
-        co.Progress.baseProgressTrue("进度", "进度", (ret) => {
-            let state = "";
-            let text = "";
-            let percent = 0;
-
-            $.ajax({
-                url: "/infosvrinsidedocking/task/public/query?taskId=" + taskId,
-                type: "POST",
-                async: false,
-                success: function (ret) {
-                    if (ret.code != 0) {
-                        state = "fail";
-                        text = ret.message;
-                    } else if (ret.data.pos != 100) {
-                        text = ret.data.message;
-                        percent = ret.data.pos;
-                        state = "ongoing";
-                    } else {
-                        text = ret.data.data;
-                        percent = 100;
-                        state = "done";
-                    }
-                },
-                error: function (ret) {
-                    state = "fail";
-                    text = "操作失败，请联系管理员！";
-                }
-            });
-            var progressInfo = {
-                text: text, //进度条展示文本
-                percent: percent,   //进度进度百分比
-                state: state //状态
-            }
-            return progressInfo;
-        }, "", 1000, (d) => {
-            if (d.state == "done") {
-                var oData = JSON.parse(d.text);
-                if(oData.length>0){
-                    co.setDomainValue("SMJCSFTG", "0", true);
-                    co.Message.error_middle("涉密检测不通过")
-                    window.addSmFailRecord(d.text)
-                    co.Subform.refresh("F64251970FB18ED7D04A")
-                }else{
-                    co.setDomainValue("SMJCSFTG", "1", true);
-                    co.Message.success_middle("涉密检测通过")
-                }
-            } else {
-                co.setValue("SMJCSFTG", "0");
-                co.Message.error_middle("涉密检测不通过")
-                window.addSmFailRecord("")
-                co.Subform.refresh("F64251970FB18ED7D04A")
-            }
-            window.smztShow()
-        })
-    }
-}
-window.addSmFailRecord = function (resultStr) {
-    var currTime = co.DateUtil.dateNowLong()
-    if(resultStr && resultStr != ''){
-        let oData = JSON.parse(resultStr);
-        for(let i = 0; i < oData.length; i++){
-            var info = oData[i]
-            var data = {
-                "RID": $.uuid(),
-                "SYS_PARENTRID": co.getValue("RID") + "::F64251970FB18ED7D04A",
-                "BTGNR": info.contain,
-                "FILE": info.fileName + "|" + info.filePath,
-                "CREATETIME": currTime
-            }
-            co.Sql.execSql("新增涉密检测失败记录", data);
-        }
-    }else{
-        var data = {
-            "RID": $.uuid(),
-            "SYS_PARENTRID": co.getValue("RID") + "::F64251970FB18ED7D04A",
-            "BTGNR": "操作失败",
-            "FILE": co.getValue("WJJSC"),
-            "CREATETIME": currTime
-        }
-        co.Sql.execSql("新增涉密检测失败记录", data);
-    }
-}
-/**
- * 导出审计问题记录Excel
- * @param type 类型：ywsh-业务审核，jssc-技术审核（可选，不传则从co.params.ty获取）
- * @author dongYang.huang
- * @date 2026/3/16
- */
-window.exportExcel = function (typeParam) {
-    try {
-        // 开启遮罩层
-        co.Toolbox.showMask();
-
-        // 获取类型参数（必填）
-        if (!typeParam) {
-            co.Message.error_middle("类型参数不能为空，可选值：ywsh(业务审核)、jssc(技术审核)");
-            co.Toolbox.hideMask();
-            return;
-        }
-        if (typeParam !== 'ywsh' && typeParam !== 'jssc') {
-            co.Message.error_middle("类型参数无效，可选值：ywsh(业务审核)、jssc(技术审核)");
-            co.Toolbox.hideMask();
-            return;
-        }
-
-        // 获取RID参数
-        var rid = co.params.rid;
-        if (!rid) {
-            co.Message.error_middle("父级RID不能为空");
-            co.Toolbox.hideMask();
-            return;
-        }
-
-        // 构建导出URL
-        var url = "/sinfoweb/auditProblemRecord/exportExcel?type=" + encodeURIComponent(typeParam) + "&rid=" + encodeURIComponent(rid);
-
-        // 发送AJAX请求检查数据
-        var xhr = new XMLHttpRequest();
-        xhr.open('HEAD', url, true);
-
-        xhr.onreadystatechange = function() {
-            if (xhr.readyState === 4) {
-                co.Toolbox.hideMask();
-
-                if (xhr.status === 200) {
-                    // 创建隐藏的iframe进行下载
-                    var iframe = document.createElement('iframe');
-                    iframe.style.display = 'none';
-                    iframe.src = url;
-                    document.body.appendChild(iframe);
-
-                    // 延迟移除iframe
-                    setTimeout(function() {
-                        document.body.removeChild(iframe);
-                    }, 2000);
-
-                    co.Message.success_middle("导出成功，请查看下载文件");
-                } else if (xhr.status === 400) {
-                    co.Message.error_middle("参数错误，请检查类型和父级RID");
-                } else {
-                    co.Message.error_middle("导出失败，状态码：" + xhr.status);
-                }
-            }
-        };
-
-        xhr.onerror = function() {
-            co.Toolbox.hideMask();
-            co.Message.error_middle("网络请求失败");
-        };
-
-        xhr.send();
-
-    } catch (error) {
-        co.Toolbox.hideMask();
-        co.Message.error_middle("导出失败：" + error.message);
-        console.error("导出失败：", error);
-    }
-}
-
-/**
- * 导入审计问题记录Excel
- * @param type 类型：ywsh-业务审核，jssc-技术审核（可选，不传则从co.params.ty获取）
- * @author dongYang.huang
- * @date 2026/3/16
- */
-window.importExcel = function (typeParam) {
-    try {
-        // 获取类型参数（必填）
-        if (!typeParam) {
-            co.Message.error_middle("类型参数不能为空，可选值：ywsh(业务审核)、jssc(技术审核)");
-            return;
-        }
-        if (typeParam !== 'ywsh' && typeParam !== 'jssc') {
-            co.Message.error_middle("类型参数无效，可选值：ywsh(业务审核)、jssc(技术审核)");
-            return;
-        }
-        // 获取RID参数
-        var rid = co.params.rid;
-        if (!rid) {
-            co.Message.error_middle("父级RID不能为空");
-            return;
-        }
-
-        // 创建文件输入元素
-        var fileInput = document.createElement('input');
-        fileInput.type = 'file';
-        fileInput.accept = '.xlsx,.xls';
-        fileInput.style.display = 'none';
-
-        fileInput.onchange = function(event) {
-            var file = event.target.files[0];
-            if (!file) {
-                return;
-            }
-
-            // 验证文件类型
-            var fileName = file.name.toLowerCase();
-            if (!fileName.endsWith('.xlsx') && !fileName.endsWith('.xls')) {
-                co.Message.error_middle("请选择Excel文件（.xlsx或.xls格式）");
-                return;
-            }
-
-            // 验证文件大小（限制为10MB）
-            if (file.size > 10 * 1024 * 1024) {
-                co.Message.error_middle("文件大小不能超过10MB");
-                return;
-            }
-
-            // 开启遮罩层
-            co.Toolbox.showMask();
-
-            // 创建FormData
-            var formData = new FormData();
-            formData.append('type', typeParam);
-            formData.append('rid', rid);
-            formData.append('file', file);
-
-            // 发送AJAX请求
-            var xhr = new XMLHttpRequest();
-            xhr.open('POST', '/sinfoweb/auditProblemRecord/importExcel', true);
-
-            xhr.onreadystatechange = function() {
-                if (xhr.readyState === 4) {
-                    co.Toolbox.hideMask();
-
-                    if (xhr.status === 200) {
-                        try {
-                            var response = JSON.parse(xhr.responseText);
-                            if (response.code === 0) {
-                                co.Message.success_middle(response.desc || "导入成功");
-                                // 可以在这里添加刷新页面或重新加载数据的逻辑
-                                if (typeParam == 'ywsh') {
-                                    co.Subform.refresh("F8575183EF01D5721AF8");
-                                    co.setDomainValue("ZLPF", co.getDomainValue("ZLPF", true));
-                                    co.setDomainValue("LSZLPF", co.getDomainValue("LSZLPF", true));
-                                }else if (typeParam == 'jssc'){
-                                    co.Subform.refresh("FFA1F183D5B0DBF31AD2");
-                                    co.setDomainValue("JSSCZJPF", co.getDomainValue("JSSCZJPF", true));
-                                    co.setDomainValue("JSSCLSZJPF", co.getDomainValue("JSSCLSZJPF", true));
-                                }
-                            } else {
-                                co.Message.error_middle(response.desc || "导入失败");
-                            }
-                        } catch (e) {
-                            co.Message.error_middle("响应数据解析失败");
-                        }
-                    } else {
-                        co.Message.error_middle("请求失败，状态码：" + xhr.status);
-                    }
-                }
-            };
-
-            xhr.onerror = function() {
-                co.Toolbox.hideMask();
-                co.Message.error_middle("网络请求失败");
-            };
-
-            xhr.send(formData);
-        };
-
-        // 触发文件选择
-        document.body.appendChild(fileInput);
-        fileInput.click();
-        document.body.removeChild(fileInput);
-
-    } catch (error) {
-        co.Toolbox.hideMask();
-        co.Message.error_middle("导入失败：" + error.message);
-        console.error("导入失败：", error);
-    }
-}
-
-/**
- * 下载审计问题记录导入模板
- * @param type 类型：ywsh-业务审核，jssc-技术审核（可选，不传则从co.params.ty获取）
- * @author dongYang.huang
- * @date 2026/3/16
- */
-window.downloadTemplate = function (typeParam) {
-    try {
-        // 开启遮罩层
-        co.Toolbox.showMask();
-
-        // 获取类型参数（必填），可从参数传入或co.params.ty获取
-        if (!typeParam) {
-            co.Message.error_middle("类型参数不能为空，可选值：ywsh(业务审核)、jssc(技术审核)");
-            co.Toolbox.hideMask();
-            return;
-        }
-        if (typeParam !== 'ywsh' && typeParam !== 'jssc') {
-            co.Message.error_middle("类型参数无效，可选值：ywsh(业务审核)、jssc(技术审核)");
-            co.Toolbox.hideMask();
-            return;
-        }
-
-        // 构建下载URL
-        var url = "/sinfoweb/auditProblemRecord/downloadTemplate?type=" + encodeURIComponent(typeParam);
-
-        // 创建隐藏的iframe进行下载
-        var iframe = document.createElement('iframe');
-        iframe.style.display = 'none';
-        iframe.src = url;
-        document.body.appendChild(iframe);
-
-        // 延迟移除iframe
-        setTimeout(function() {
-            document.body.removeChild(iframe);
-            co.Toolbox.hideMask();
-            co.Message.success_middle("模板下载成功");
-        }, 2000);
-
-    } catch (error) {
-        co.Toolbox.hideMask();
-        co.Message.error_middle("下载模板失败：" + error.message);
-        console.error("下载模板失败：", error);
-    }
-}
 /**
  * 加载前需要执行的方法
  */
