@@ -173,6 +173,80 @@ window.sinfo_uploadSingleFileWithProgress = function (controlId, colKey, fileTyp
         getSInfoWebDownLoadUrl: window.getSInfoWebDownLoadUrl
     })
 }
+
+/**
+ * 模拟进度条递进（停滞指定时长，进度从 startPercent 递增至 endPercent）
+ * @param vue
+ * @param startPercent 起始进度
+ * @param endPercent 结束进度
+ * @param durationMs 总时长（毫秒）
+ * @param title 进度标题
+ * @param callback 完成后回调
+ */
+window.runWithSimulatedProgress = function (vue, startPercent, endPercent, durationMs, title, callback) {
+    const start = Number(startPercent) || 0;
+    const end = Number(endPercent) || 100;
+    const duration = Number(durationMs) || 3000;
+    let progressFinished = false;
+    let callbackInvoked = false;
+    const invokeCallback = () => {
+        if (callbackInvoked || typeof callback !== "function") {
+            return;
+        }
+        callbackInvoked = true;
+        const run = () => callback();
+        if (vue.$nextTick) {
+            vue.$nextTick(run);
+        } else {
+            setTimeout(run, 0);
+        }
+    };
+    vue.$modal.alert({
+        closable: false,
+        onHidden: () => {
+            if (progressFinished) {
+                invokeCallback();
+            }
+        },
+        render: (h) => {
+            h = vue.$createElement;
+            return h({
+                template: `
+              <div>
+                <sg-progress :percent="percent" :animate="false" :stroke-width="20" text-inside text-color="#FFF" style="margin-bottom:10px;"/>
+                <p>{{ message }}</p>
+              </div>
+              `,
+                data() {
+                    return {
+                        percent: start,
+                        message: title || ""
+                    };
+                },
+                mounted() {
+                    const beginTime = Date.now();
+                    const timer = setInterval(() => {
+                        const elapsed = Date.now() - beginTime;
+                        const ratio = Math.min(elapsed / duration, 1);
+                        this.percent = Math.round(start + (end - start) * ratio);
+                        if (ratio >= 1) {
+                            clearInterval(timer);
+                            progressFinished = true;
+                            vue.$modal.remove();
+                            // 进度弹窗关闭后再打开结果弹窗，避免 $modal 层叠冲突
+                            setTimeout(invokeCallback, 400);
+                        }
+                    }, 50);
+                }
+            });
+        },
+        footerHide: true,
+        similar: true,
+        width: "500px",
+        height: "90px"
+    });
+};
+
 /**
  * 文件上传控件样式修改
  */
@@ -1238,41 +1312,70 @@ window.startAutoCheckSme = function (bIsSubmit) {
     function successCallback(oReturn) {
         // 如果进度100了，则质检完成
         if (oReturn.pos.toString().includes("100")) {
-            let aData = oReturn.data;
-            if (aData.length === 0) {
-                co.setValue("SFZJTG", "1");
-                co.Message.error_middle("质检返回格式有误！")
-            } else {
-                let data = aData[0];
-                let sZipurl = data.zipurl;
-                let sWJJSC = co.getValue("WJJSC");
-                let aWJJSC = sWJJSC.split("|");
-                let sNewTitle = aWJJSC[0].substring(0, aWJJSC[0].indexOf(".zip")) + "质检结果包.zip"
-                $.ajax({
-                    //url: "http://192.168.92.1:9090/sinfoweb-hdy/cghj/public/changeDownUrl",
-                    url: "/sinfoweb/cghj/changeDownUrl",
-                    type: "POST",
-                    async: false,
-                    contentType: 'application/json',
-                    dataType: "text",
-                    data: JSON.stringify({
-                        "zipurl": sZipurl,
-                        "sNewTitle": sNewTitle
-                    }),
-                    success: function (data) {
-                        sZipurl = data;
-                    },
-                    error: function (error) {
-                        console.log("转换下载地址有误");
-                    },
-                });
-                if (data.rowsList.length === 0) {
-                    co.setValue("SFZJTG", "2");
-                    // 保存记录
-                    co.setValue("SCZJCWB", sZipurl);
-                    shztShow();
-                    if (bIsSubmit) {
-                        if (data.total > 0) {
+            window.runWithSimulatedProgress(window.Sgui, 1, 100, 3000, "质检进度", function () {
+                let aData = oReturn.data;
+                if (aData.length === 0) {
+                    co.setValue("SFZJTG", "1");
+                    co.Message.error_middle("质检返回格式有误！")
+                } else {
+                    let data = aData[0];
+                    let sZipurl = data.zipurl;
+                    let sWJJSC = co.getValue("WJJSC");
+                    let aWJJSC = sWJJSC.split("|");
+                    let sNewTitle = aWJJSC[0].substring(0, aWJJSC[0].indexOf(".zip")) + "质检结果包.zip"
+                    $.ajax({
+                        //url: "http://192.168.92.1:9090/sinfoweb-hdy/cghj/public/changeDownUrl",
+                        url: "/sinfoweb/cghj/changeDownUrl",
+                        type: "POST",
+                        async: false,
+                        contentType: 'application/json',
+                        dataType: "text",
+                        data: JSON.stringify({
+                            "zipurl": sZipurl,
+                            "sNewTitle": sNewTitle
+                        }),
+                        success: function (data) {
+                            sZipurl = data;
+                        },
+                        error: function (error) {
+                            console.log("转换下载地址有误");
+                        },
+                    });
+                    if (data.rowsList.length === 0) {
+                        co.setValue("SFZJTG", "2");
+                        // 保存记录
+                        co.setValue("SCZJCWB", sZipurl);
+                        shztShow();
+                        if (bIsSubmit) {
+                            if (data.total > 0) {
+                                window.qualityInspectionResultsModel(
+                                    // window.parent.$sinfoUtil.qualityInspectionResultsModel(
+                                    window.Sgui,
+                                    data,
+                                    () => {
+                                        console.log('successCallback')
+                                    },
+                                    () => {
+                                        console.log('errorCallback')
+                                    },
+                                    (data) => {
+                                        window.downloadZjcwb();
+                                    },
+                                    '质检完成，存在{NUM}类错误，如下：'
+                                );
+                            } else {
+                                setTimeout(() => {
+                                    let chdwqzpzqy = co.getValue("CHDWQZPZQY", "PROJ_DZQZ", "1", "1", true);
+                                    if (chdwqzpzqy == "1") {//需要签章
+                                        window.signZipFile("测绘单位", true);
+                                    }else{
+                                        co.Dialog.confirm("质检通过，是否汇交？", "提交确认", () => {
+                                            co.Flow.readySubmitComplete();
+                                        })
+                                    }
+                                }, 500);
+                            }
+                        } else {
                             window.qualityInspectionResultsModel(
                                 // window.parent.$sinfoUtil.qualityInspectionResultsModel(
                                 window.Sgui,
@@ -1288,19 +1391,14 @@ window.startAutoCheckSme = function (bIsSubmit) {
                                 },
                                 '质检完成，存在{NUM}类错误，如下：'
                             );
-                        } else {
-                            setTimeout(() => {
-                                let chdwqzpzqy = co.getValue("CHDWQZPZQY", "PROJ_DZQZ", "1", "1", true);
-                                if (chdwqzpzqy == "1") {//需要签章
-                                    window.signZipFile("测绘单位", true);
-                                }else{
-                                    co.Dialog.confirm("质检通过，是否汇交？", "提交确认", () => {
-                                        co.Flow.readySubmitComplete();
-                                    })
-                                }
-                            }, 500);
                         }
                     } else {
+                        co.setValue("SFZJTG", "1");
+                        // 保存记录
+                        co.setValue("SCZJCWB", sZipurl);
+                        // 修改页面红字审查
+                        shztShow();
+                        co.setValue("ZJJGJSON", JSON.stringify(data));
                         window.qualityInspectionResultsModel(
                             // window.parent.$sinfoUtil.qualityInspectionResultsModel(
                             window.Sgui,
@@ -1317,53 +1415,31 @@ window.startAutoCheckSme = function (bIsSubmit) {
                             '质检完成，存在{NUM}类错误，如下：'
                         );
                     }
-                } else {
-                    co.setValue("SFZJTG", "1");
-                    // 保存记录
-                    co.setValue("SCZJCWB", sZipurl);
-                    // 修改页面红字审查
-                    shztShow();
-                    co.setValue("ZJJGJSON", JSON.stringify(data));
-                    window.qualityInspectionResultsModel(
-                        // window.parent.$sinfoUtil.qualityInspectionResultsModel(
-                        window.Sgui,
-                        data,
-                        () => {
-                            console.log('successCallback')
+                    $.ajax({
+                        //url: "http://192.168.92.1:9090/sinfoweb-hdy/cghj/public/updateCghjData",
+                        url: "/sinfoweb/cghj/updateCghjData",
+                        type: "POST",
+                        async: false,
+                        contentType: 'application/json',
+                        dataType: "text",
+                        data: JSON.stringify({
+                            "sczjcwb": encodeURIComponent(window.co.getValue("SCZJCWB")),
+                            "sfzjtg": window.co.getValue("SFZJTG"),
+                            "wjjsc": window.co.getValue("WJJSC"),
+                            "zjjgjson": window.co.getValue("ZJJGJSON"),
+                            "rid": window.co.getValue("RID")
+                        }),
+                        success: function (data) {
+                            console.log("保存成功！");
                         },
-                        () => {
-                            console.log('errorCallback')
-                        },
-                        (data) => {
-                            window.downloadZjcwb();
-                        },
-                        '质检完成，存在{NUM}类错误，如下：'
-                    );
-                }
-                $.ajax({
-                    //url: "http://192.168.92.1:9090/sinfoweb-hdy/cghj/public/updateCghjData",
-                    url: "/sinfoweb/cghj/updateCghjData",
-                    type: "POST",
-                    async: false,
-                    contentType: 'application/json',
-                    dataType: "text",
-                    data: JSON.stringify({
-                        "sczjcwb": encodeURIComponent(window.co.getValue("SCZJCWB")),
-                        "sfzjtg": window.co.getValue("SFZJTG"),
-                        "wjjsc": window.co.getValue("WJJSC"),
-                        "zjjgjson": window.co.getValue("ZJJGJSON"),
-                        "rid": window.co.getValue("RID")
-                    }),
-                    success: function (data) {
-                        console.log("保存成功！");
-                    },
-                    error: function (error) {
-                        console.log("保存失败");
-                        console.log(error);
+                        error: function (error) {
+                            console.log("保存失败");
+                            console.log(error);
 
-                    },
-                });
-            }
+                        },
+                    });
+                }
+            });
         } else {
             co.Message.error_middle("质检返回格式有误,未100%就返回成功！")
         }
