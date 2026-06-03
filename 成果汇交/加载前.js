@@ -3384,6 +3384,242 @@ window.signZipFile = function (type, submitAfterSuccess) {
 }
 
 /**
+ * 导出审计问题记录Excel
+ * @param type 类型：ywsh-业务审核，jssc-技术审核（可选，不传则从co.params.ty获取）
+ * @author dongYang.huang
+ * @date 2026/3/16
+ */
+window.exportExcel = function (typeParam) {
+    try {
+        // 开启遮罩层
+        co.Toolbox.showMask();
+
+        // 获取类型参数（必填）
+        if (!typeParam) {
+            co.Message.error_middle("类型参数不能为空，可选值：ywsh(业务审核)、jssc(技术审核)");
+            co.Toolbox.hideMask();
+            return;
+        }
+        if (typeParam !== 'ywsh' && typeParam !== 'jssc') {
+            co.Message.error_middle("类型参数无效，可选值：ywsh(业务审核)、jssc(技术审核)");
+            co.Toolbox.hideMask();
+            return;
+        }
+
+        // 获取RID参数
+        var rid = co.params.rid;
+        if (!rid) {
+            co.Message.error_middle("父级RID不能为空");
+            co.Toolbox.hideMask();
+            return;
+        }
+
+        // 构建导出URL
+        var url = "/sinfoweb/auditProblemRecord/exportExcel?type=" + encodeURIComponent(typeParam) + "&rid=" + encodeURIComponent(rid);
+
+        // 发送AJAX请求检查数据
+        var xhr = new XMLHttpRequest();
+        xhr.open('HEAD', url, true);
+
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState === 4) {
+                co.Toolbox.hideMask();
+
+                if (xhr.status === 200) {
+                    // 创建隐藏的iframe进行下载
+                    var iframe = document.createElement('iframe');
+                    iframe.style.display = 'none';
+                    iframe.src = url;
+                    document.body.appendChild(iframe);
+
+                    // 延迟移除iframe
+                    setTimeout(function() {
+                        document.body.removeChild(iframe);
+                    }, 2000);
+
+                    co.Message.success_middle("导出成功，请查看下载文件");
+                } else if (xhr.status === 400) {
+                    co.Message.error_middle("参数错误，请检查类型和父级RID");
+                } else {
+                    co.Message.error_middle("导出失败，状态码：" + xhr.status);
+                }
+            }
+        };
+
+        xhr.onerror = function() {
+            co.Toolbox.hideMask();
+            co.Message.error_middle("网络请求失败");
+        };
+
+        xhr.send();
+
+    } catch (error) {
+        co.Toolbox.hideMask();
+        co.Message.error_middle("导出失败：" + error.message);
+        console.error("导出失败：", error);
+    }
+}
+
+/**
+ * 导入审计问题记录Excel
+ * @param type 类型：ywsh-业务审核，jssc-技术审核（可选，不传则从co.params.ty获取）
+ * @author dongYang.huang
+ * @date 2026/3/16
+ */
+window.importExcel = function (typeParam) {
+    try {
+        // 获取类型参数（必填）
+        if (!typeParam) {
+            co.Message.error_middle("类型参数不能为空，可选值：ywsh(业务审核)、jssc(技术审核)");
+            return;
+        }
+        if (typeParam !== 'ywsh' && typeParam !== 'jssc') {
+            co.Message.error_middle("类型参数无效，可选值：ywsh(业务审核)、jssc(技术审核)");
+            return;
+        }
+        // 获取RID参数
+        var rid = co.params.rid;
+        if (!rid) {
+            co.Message.error_middle("父级RID不能为空");
+            return;
+        }
+
+        // 创建文件输入元素
+        var fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.accept = '.xlsx,.xls';
+        fileInput.style.display = 'none';
+
+        fileInput.onchange = function(event) {
+            var file = event.target.files[0];
+            if (!file) {
+                return;
+            }
+
+            // 验证文件类型
+            var fileName = file.name.toLowerCase();
+            if (!fileName.endsWith('.xlsx') && !fileName.endsWith('.xls')) {
+                co.Message.error_middle("请选择Excel文件（.xlsx或.xls格式）");
+                return;
+            }
+
+            // 验证文件大小（限制为10MB）
+            if (file.size > 10 * 1024 * 1024) {
+                co.Message.error_middle("文件大小不能超过10MB");
+                return;
+            }
+
+            // 开启遮罩层
+            co.Toolbox.showMask();
+
+            // 创建FormData
+            var formData = new FormData();
+            formData.append('type', typeParam);
+            formData.append('rid', rid);
+            formData.append('file', file);
+
+            // 发送AJAX请求
+            var xhr = new XMLHttpRequest();
+            xhr.open('POST', '/sinfoweb/auditProblemRecord/importExcel', true);
+
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4) {
+                    co.Toolbox.hideMask();
+
+                    if (xhr.status === 200) {
+                        try {
+                            var response = JSON.parse(xhr.responseText);
+                            if (response.code === 0) {
+                                co.Message.success_middle(response.desc || "导入成功");
+                                // 可以在这里添加刷新页面或重新加载数据的逻辑
+                                if (typeParam == 'ywsh') {
+                                    co.Subform.refresh("F8575183EF01D5721AF8");
+                                    co.setDomainValue("ZLPF", co.getDomainValue("ZLPF", true));
+                                    co.setDomainValue("LSZLPF", co.getDomainValue("LSZLPF", true));
+                                }else if (typeParam == 'jssc'){
+                                    co.Subform.refresh("FFA1F183D5B0DBF31AD2");
+                                    co.setDomainValue("JSSCZJPF", co.getDomainValue("JSSCZJPF", true));
+                                    co.setDomainValue("JSSCLSZJPF", co.getDomainValue("JSSCLSZJPF", true));
+                                }
+                            } else {
+                                co.Message.error_middle(response.desc || "导入失败");
+                            }
+                        } catch (e) {
+                            co.Message.error_middle("响应数据解析失败");
+                        }
+                    } else {
+                        co.Message.error_middle("请求失败，状态码：" + xhr.status);
+                    }
+                }
+            };
+
+            xhr.onerror = function() {
+                co.Toolbox.hideMask();
+                co.Message.error_middle("网络请求失败");
+            };
+
+            xhr.send(formData);
+        };
+
+        // 触发文件选择
+        document.body.appendChild(fileInput);
+        fileInput.click();
+        document.body.removeChild(fileInput);
+
+    } catch (error) {
+        co.Toolbox.hideMask();
+        co.Message.error_middle("导入失败：" + error.message);
+        console.error("导入失败：", error);
+    }
+}
+
+/**
+ * 下载审计问题记录导入模板
+ * @param type 类型：ywsh-业务审核，jssc-技术审核（可选，不传则从co.params.ty获取）
+ * @author dongYang.huang
+ * @date 2026/3/16
+ */
+window.downloadTemplate = function (typeParam) {
+    try {
+        // 开启遮罩层
+        co.Toolbox.showMask();
+
+        // 获取类型参数（必填），可从参数传入或co.params.ty获取
+        if (!typeParam) {
+            co.Message.error_middle("类型参数不能为空，可选值：ywsh(业务审核)、jssc(技术审核)");
+            co.Toolbox.hideMask();
+            return;
+        }
+        if (typeParam !== 'ywsh' && typeParam !== 'jssc') {
+            co.Message.error_middle("类型参数无效，可选值：ywsh(业务审核)、jssc(技术审核)");
+            co.Toolbox.hideMask();
+            return;
+        }
+
+        // 构建下载URL
+        var url = "/sinfoweb/auditProblemRecord/downloadTemplate?type=" + encodeURIComponent(typeParam);
+
+        // 创建隐藏的iframe进行下载
+        var iframe = document.createElement('iframe');
+        iframe.style.display = 'none';
+        iframe.src = url;
+        document.body.appendChild(iframe);
+
+        // 延迟移除iframe
+        setTimeout(function() {
+            document.body.removeChild(iframe);
+            co.Toolbox.hideMask();
+            co.Message.success_middle("模板下载成功");
+        }, 2000);
+
+    } catch (error) {
+        co.Toolbox.hideMask();
+        co.Message.error_middle("下载模板失败：" + error.message);
+        console.error("下载模板失败：", error);
+    }
+}
+
+/**
  * 加载前需要执行的方法
  */
 window.doBeforeLoading = function () {
